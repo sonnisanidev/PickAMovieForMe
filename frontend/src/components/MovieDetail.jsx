@@ -22,7 +22,7 @@ const MovieDetail = ({ movie, isLoading }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden mt-16">
       {/* Backdrop Image */}
       <div className="relative h-[300px] md:h-[400px]">
         <img
@@ -61,7 +61,7 @@ const MovieDetail = ({ movie, isLoading }) => {
           {movie.genres?.map(genre => (
             <span
               key={genre.id}
-              className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+              className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full text-sm"
             >
               {genre.name}
             </span>
@@ -70,22 +70,22 @@ const MovieDetail = ({ movie, isLoading }) => {
 
         {/* Overview */}
         <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-2">Overview</h2>
-          <p className="text-gray-700 leading-relaxed">{movie.overview}</p>
+          <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">Overview</h2>
+          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{movie.overview}</p>
         </div>
 
         {/* Additional Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {movie.tagline && (
             <div>
-              <h3 className="font-medium text-gray-900">Tagline</h3>
-              <p className="text-gray-600 italic">{movie.tagline}</p>
+              <h3 className="font-medium text-gray-900 dark:text-gray-100">Tagline</h3>
+              <p className="text-gray-600 dark:text-gray-400 italic">{movie.tagline}</p>
             </div>
           )}
           {movie.production_companies?.length > 0 && (
             <div>
-              <h3 className="font-medium text-gray-900">Production</h3>
-              <p className="text-gray-600">
+              <h3 className="font-medium text-gray-900 dark:text-gray-100">Production</h3>
+              <p className="text-gray-600 dark:text-gray-400">
                 {movie.production_companies.map(company => company.name).join(', ')}
               </p>
             </div>
@@ -96,8 +96,9 @@ const MovieDetail = ({ movie, isLoading }) => {
         <div className="mt-6 flex gap-4">
           <button
             onClick={() => setShowTrailer(true)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
-                     transition-colors duration-200 flex items-center"
+            className="px-6 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-lg 
+                     hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 
+                     flex items-center shadow-md hover:shadow-lg"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
@@ -112,8 +113,9 @@ const MovieDetail = ({ movie, isLoading }) => {
             href={`https://www.imdb.com/title/${movie.imdb_id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 
-                     transition-colors duration-200"
+            className="px-6 py-2 bg-yellow-500 text-white rounded-lg 
+                     hover:bg-yellow-600 transition-colors duration-200 
+                     shadow-md hover:shadow-lg"
           >
             IMDb
           </a>
