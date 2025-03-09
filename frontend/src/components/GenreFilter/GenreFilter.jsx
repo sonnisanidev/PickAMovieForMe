@@ -1,57 +1,56 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { movieService } from '../../services/api/movieService';
 
-const genres = [
-  { id: 28, name: 'Action' },
-  { id: 12, name: 'Adventure' },
-  { id: 16, name: 'Animation' },
-  { id: 35, name: 'Comedy' },
-  { id: 80, name: 'Crime' },
-  { id: 99, name: 'Documentary' },
-  { id: 18, name: 'Drama' },
-  { id: 10751, name: 'Family' },
-  { id: 14, name: 'Fantasy' },
-  { id: 36, name: 'History' },
-  { id: 27, name: 'Horror' },
-  { id: 10402, name: 'Music' },
-  { id: 9648, name: 'Mystery' },
-  { id: 10749, name: 'Romance' },
-  { id: 878, name: 'Science Fiction' },
-  { id: 53, name: 'Thriller' }
-];
+const GenreFilter = ({ selectedGenres = [], onChange, disabled = false }) => {
+  const { data: genres = [], isLoading } = useQuery({
+    queryKey: ['genres'],
+    queryFn: () => movieService.getGenres(),
+  });
 
-const GenreFilter = ({ selectedGenres, onChange }) => {
-  const handleGenreClick = (genreId) => {
-    const newSelection = selectedGenres.includes(genreId)
-      ? selectedGenres.filter(id => id !== genreId)
-      : [...selectedGenres, genreId];
-    onChange(newSelection);
+  const handleGenreClick = (genre) => {
+    if (disabled) return;
+    
+    const isSelected = selectedGenres.includes(genre);
+    if (isSelected) {
+      onChange(selectedGenres.filter(g => g !== genre));
+    } else {
+      onChange([...selectedGenres, genre]);
+    }
   };
 
+  if (isLoading) return null;
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-      <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-        Genres
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        Filter by Genre
       </h3>
       <div className="flex flex-wrap gap-2">
-        {genres.map(({ id, name }) => (
+        {genres.map(genre => (
           <button
-            key={id}
-            onClick={() => handleGenreClick(id)}
-            className={`
-              px-3 py-1 rounded-full text-sm font-medium
-              transition-all duration-200
-              ${selectedGenres.includes(id)
+            key={genre}
+            onClick={() => handleGenreClick(genre)}
+            disabled={disabled}
+            className={`px-3 py-1 rounded-full text-sm transition-colors
+              ${selectedGenres.includes(genre)
                 ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }
+              ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
             `}
           >
-            {name}
+            {genre}
           </button>
         ))}
       </div>
+      {disabled && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Genre filter is disabled when a mood is selected
+        </p>
+      )}
     </div>
   );
 };
 
-export default GenreFilter;
+export default React.memo(GenreFilter);

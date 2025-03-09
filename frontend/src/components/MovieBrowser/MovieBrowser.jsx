@@ -1,97 +1,110 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import MoodSelector from '../MoodSelector/MoodSelector';
 import MovieList from '../MovieList/MovieList';
 import GenreFilter from '../GenreFilter/GenreFilter';
-import StreamingFilter from '../StreamingFilter/StreamingFilter';
+import SortingFilter from '../SortingFilter/SortingFilter';
 import LoadingSpinner from '../LoadingSpinner/LoadingSpinner';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { movieService } from '../../services/api/movieService';
 
 const MovieBrowser = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page')) || 1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Get mood from either location state or search params
+  const moodFromState = location.state?.mood;
+  const moodFromParams = searchParams.get('mood');
+
+  // If no mood is set, redirect to home
+  useEffect(() => {
+    if (!moodFromState && !moodFromParams) {
+      navigate('/', { replace: true });
+    }
+  }, [moodFromState, moodFromParams, navigate]);
+
   // State from URL parameters
-  const [selectedMood, setSelectedMood] = useState(searchParams.get('mood') || '');
+  const [selectedMood, setSelectedMood] = useState(moodFromState || moodFromParams || '');
   const [selectedGenres, setSelectedGenres] = useState(
     searchParams.get('genres')?.split(',').filter(Boolean) || []
   );
-  const [streamingFilters, setStreamingFilters] = useState({
-    services: searchParams.get('services')?.split(',').filter(Boolean) || [],
-    country: searchParams.get('country') || 'US',
-    includeRentals: searchParams.get('rentals') === 'true'
-  });
+  const [selectedSort, setSelectedSort] = useState(searchParams.get('sort') || 'popularity.desc');
+
+  // Memoize URL parameter update logic
+  const updateUrlParams = useCallback((mood, genres, sort, page) => {
+    const params = new URLSearchParams();
+    if (mood) params.set('mood', mood);
+    if (genres.length) params.set('genres', genres.join(','));
+    if (sort) params.set('sort', sort);
+    params.set('page', page.toString());
+    setSearchParams(params);
+  }, [setSearchParams]);
 
   // Update URL when filters change
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (selectedMood) params.set('mood', selectedMood);
-    if (selectedGenres.length) params.set('genres', selectedGenres.join(','));
-    if (streamingFilters.services.length) params.set('services', streamingFilters.services.join(','));
-    if (streamingFilters.country !== 'US') params.set('country', streamingFilters.country);
-    if (streamingFilters.includeRentals) params.set('rentals', 'true');
-    params.set('page', currentPage.toString());
-    setSearchParams(params);
-  }, [selectedMood, selectedGenres, streamingFilters, currentPage, setSearchParams]);
+    updateUrlParams(selectedMood, selectedGenres, selectedSort, currentPage);
+  }, [selectedMood, selectedGenres, selectedSort, currentPage, updateUrlParams]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-    setMovies([]);
-  }, [selectedMood, selectedGenres, streamingFilters]);
+  }, [selectedMood, selectedGenres, selectedSort]);
 
-  // Fetch movies based on filters
-  const fetchMovies = async (page = 1) => {
+  // Memoize movie fetch function
+  const fetchMovies = useCallback(async (page = 1) => {
     try {
       setLoading(true);
       setError(null);
 
-      // Get movie recommendations based on mood and genres
       const { results, totalPages: total } = await movieService.getRecommendations({
         mood: selectedMood,
         genres: selectedGenres,
+        sort: selectedSort,
         page
       });
 
       setMovies(results);
       setTotalPages(total);
     } catch (err) {
-      setError('Failed to fetch movie recommendations');
-      console.error('Error fetching movies:', err);
+      setError(err.response?.data?.error || 'Failed to fetch movie recommendations');
+      console.error('Error fetching movies:', err.response?.data || err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedMood, selectedGenres, selectedSort]);
 
-  // Handle page change
-  const handlePageChange = (newPage) => {
-    setCurrentPage(newPage);
-    fetchMovies(newPage);
-    // Scroll to top when changing pages
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Initial fetch
+  // Fetch movies when filters or page changes
   useEffect(() => {
-    fetchMovies(currentPage);
-  }, [selectedMood, selectedGenres]);
+    if (selectedMood || selectedGenres.length > 0) {
+      fetchMovies(currentPage);
+    }
+  }, [selectedMood, selectedGenres, selectedSort, currentPage, fetchMovies]);
 
-  const handleMoodSelect = (mood) => {
+  // Memoize handler functions
+  const handleMoodSelect = useCallback((mood) => {
     setSelectedMood(mood);
-  };
+    setSelectedGenres([]);
+  }, []);
 
-  const handleGenreChange = (genres) => {
+  const handleGenreChange = useCallback((genres) => {
     setSelectedGenres(genres);
-  };
+    setSelectedMood('');
+  }, []);
 
-  const handleStreamingFilterChange = (filters) => {
-    setStreamingFilters(filters);
-  };
+  const handleSortChange = useCallback((sort) => {
+    setSelectedSort(sort);
+  }, []);
+
+  const handlePageChange = useCallback((newPage) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   if (error) {
     return (
@@ -121,10 +134,11 @@ const MovieBrowser = () => {
               <GenreFilter
                 selectedGenres={selectedGenres}
                 onChange={handleGenreChange}
+                disabled={!!selectedMood}
               />
-              <StreamingFilter
-                onFilterChange={handleStreamingFilterChange}
-                defaultCountry={streamingFilters.country}
+              <SortingFilter
+                selectedSort={selectedSort}
+                onSortChange={handleSortChange}
               />
             </div>
           </div>
@@ -136,7 +150,6 @@ const MovieBrowser = () => {
             ) : movies.length > 0 ? (
               <MovieList
                 movies={movies}
-                selectedCountry={streamingFilters.country}
                 currentPage={currentPage}
                 totalPages={totalPages}
                 onPageChange={handlePageChange}
@@ -153,4 +166,4 @@ const MovieBrowser = () => {
   );
 };
 
-export default MovieBrowser;
+export default React.memo(MovieBrowser);

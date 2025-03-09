@@ -1,10 +1,10 @@
 // API Configuration
-export const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api';
+export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 export const API_ENDPOINTS = {
-  RECOMMENDATIONS: '/movies/recommendations',
-  MOVIE_DETAILS: (id) => `/movies/${id}`,
-  SEARCH: '/movies/search'
+  RECOMMENDATIONS: '/api/recommendations',
+  MOVIE_DETAILS: (id) => `/api/movies/${id}`,
+  SEARCH: '/api/movies/search'
 };
 
 // Genre IDs from TMDB

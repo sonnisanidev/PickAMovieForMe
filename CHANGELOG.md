@@ -3,6 +3,13 @@
 All notable changes to Pick A Movie For Me will be documented in this file.
 
 
+## [0.5.1] - 2025-03-09
+
+### Fixed
+- Updated MovieDetail component to use React Query v5 object syntax
+- Fixed movie details fetching in the MovieDetail component
+
+
 ## [0.5.0] - 2024-01-20
 
 ### Added

@@ -1,66 +1,17 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { getServiceInfo } from '../../services/api/streamingConfig';
 
-const MovieCard = ({ movie, selectedCountry }) => {
+const MovieCard = ({ movie }) => {
   const {
     id,
     title,
     posterPath,
     releaseDate,
-    voteAverage,
-    streamingInfo = {}
+    voteAverage
   } = movie;
 
   const year = releaseDate ? new Date(releaseDate).getFullYear() : '';
   const rating = voteAverage ? Math.round(voteAverage * 10) / 10 : '';
-  
-  // Get available streaming services
-  const availableServices = Object.keys(streamingInfo);
-  
-  // Check if any service is leaving soon
-  const isLeavingSoon = availableServices.some(service => 
-    streamingInfo[service]?.leaving && 
-    new Date(streamingInfo[service].leaving) > new Date()
-  );
-
-  // Find best streaming option (prefer subscription over rental)
-  const getBestStreamingOption = () => {
-    const subscriptionServices = availableServices.filter(service => 
-      streamingInfo[service]?.type === 'subscription'
-    );
-    
-    if (subscriptionServices.length > 0) {
-      const service = subscriptionServices[0];
-      return {
-        service,
-        type: 'subscription',
-        ...getServiceInfo(service)
-      };
-    }
-
-    const rentalServices = availableServices.filter(service => 
-      streamingInfo[service]?.type === 'rent'
-    );
-
-    if (rentalServices.length > 0) {
-      const service = rentalServices.sort((a, b) => 
-        (streamingInfo[a].price || 0) - (streamingInfo[b].price || 0)
-      )[0];
-      
-      return {
-        service,
-        type: 'rental',
-        price: streamingInfo[service].price,
-        currency: streamingInfo[service].currency,
-        ...getServiceInfo(service)
-      };
-    }
-
-    return null;
-  };
-
-  const bestOption = getBestStreamingOption();
 
   return (
     <div className="group relative bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transform transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
@@ -77,31 +28,6 @@ const MovieCard = ({ movie, selectedCountry }) => {
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <span className="text-gray-400">No poster available</span>
-            </div>
-          )}
-          
-          {/* Streaming Services Badges */}
-          {availableServices.length > 0 && (
-            <div className="absolute top-2 right-2 flex flex-col gap-1">
-              {availableServices.slice(0, 3).map(service => {
-                const { name, icon, color, textColor } = getServiceInfo(service);
-                return (
-                  <div
-                    key={service}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center ${color} ${textColor}`}
-                    title={name}
-                  >
-                    <span>{icon}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Leaving Soon Badge */}
-          {isLeavingSoon && (
-            <div className="absolute top-2 left-2 bg-red-500 text-white text-xs px-2 py-1 rounded">
-              Leaving Soon
             </div>
           )}
         </div>
@@ -123,19 +49,6 @@ const MovieCard = ({ movie, selectedCountry }) => {
               </div>
             )}
           </div>
-
-          {/* Best Streaming Option */}
-          {bestOption && (
-            <div className="mt-2 text-sm">
-              <div className={`px-2 py-1 rounded ${bestOption.textColor} text-center ${bestOption.color}`}>
-                {bestOption.type === 'rental' ? (
-                  <span>Rent from {bestOption.price} {bestOption.currency}</span>
-                ) : (
-                  <span>Stream on {bestOption.name}</span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </Link>
     </div>

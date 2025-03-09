@@ -1,165 +1,173 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 const app = express();
+const port = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000'
-}));
+// TMDB API configuration
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+app.use(cors());
 app.use(express.json());
 
-// TMDB API Configuration
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
-const tmdbApi = axios.create({
-  baseURL: TMDB_BASE_URL,
-  headers: {
-    'Authorization': `Bearer ${process.env.TMDB_READ_ACCESS_TOKEN}`,
-    'Content-Type': 'application/json'
+// Error handling middleware
+const errorHandler = (err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ error: 'An error occurred while processing your request.' });
+};
+
+// Valid sort options
+const VALID_SORT_OPTIONS = [
+  'popularity.desc',
+  'popularity.asc',
+  'vote_average.desc',
+  'vote_average.asc',
+  'release_date.desc',
+  'release_date.asc'
+];
+
+// Get movie recommendations based on mood, genres, and sorting
+app.get('/api/recommendations', async (req, res) => {
+  try {
+    const { mood, genres, page = 1, sort = 'popularity.desc' } = req.query;
+    
+    // Validate sort parameter
+    if (!VALID_SORT_OPTIONS.includes(sort)) {
+      return res.status(400).json({ error: 'Invalid sort parameter' });
+    }
+
+    let movieResults = [];
+    let totalPages = 0;
+
+    // If mood is provided, use it to get recommendations
+    if (mood) {
+      const moodGenres = getMoodGenres(mood);
+      const genreIds = await getGenreIds(moodGenres);
+      const response = await getMoviesByGenres(genreIds, page, sort);
+      movieResults = response.results;
+      totalPages = response.total_pages;
+    }
+    // If specific genres are provided, use them
+    else if (genres) {
+      const genreList = genres.split(',').filter(Boolean);
+      const genreIds = await getGenreIds(genreList);
+      const response = await getMoviesByGenres(genreIds, page, sort);
+      movieResults = response.results;
+      totalPages = response.total_pages;
+    }
+
+    // Format movie results
+    const formattedResults = movieResults.map(formatMovieData);
+
+    res.json({
+      results: formattedResults,
+      totalPages: Math.min(totalPages, 500) // TMDB limits to 500 pages
+    });
+  } catch (error) {
+    console.error('Error getting recommendations:', error);
+    res.status(500).json({ error: 'Failed to get movie recommendations' });
   }
 });
 
-// Helper function to map mood to genres
-const MOOD_TO_GENRES = {
-  happy: [35, 10751, 10402], // Comedy, Family, Music
-  sad: [18, 10749], // Drama, Romance
-  excited: [28, 12, 878], // Action, Adventure, Science Fiction
-  scared: [27, 53, 9648], // Horror, Thriller, Mystery
-  relaxed: [16, 99, 14] // Animation, Documentary, Fantasy
-};
-
-// Helper function to get movie details with external IDs
-async function getMovieWithExternalIds(movieId) {
+// Get movie details by ID
+app.get('/api/movie/:id', async (req, res) => {
   try {
-    const response = await tmdbApi.get(`/movie/${movieId}`, {
+    const { id } = req.params;
+    const movieResponse = await axios.get(`${TMDB_BASE_URL}/movie/${id}`, {
       params: {
-        append_to_response: 'external_ids'
+        api_key: TMDB_API_KEY,
+        append_to_response: 'credits,videos,similar'
       }
     });
-    return {
-      id: response.data.id,
-      imdbId: response.data.external_ids?.imdb_id,
-      title: response.data.title,
-      overview: response.data.overview,
-      posterPath: response.data.poster_path,
-      releaseDate: response.data.release_date,
-      voteAverage: response.data.vote_average,
-      genres: response.data.genres.map(g => g.id)
-    };
+
+    const movie = formatMovieData(movieResponse.data);
+    res.json(movie);
   } catch (error) {
-    console.error(`Error fetching details for movie ${movieId}:`, error);
-    return null;
+    console.error('Error getting movie details:', error);
+    res.status(500).json({ error: 'Failed to get movie details' });
+  }
+});
+
+// Helper function to get genre IDs from genre names
+async function getGenreIds(genreNames) {
+  try {
+    const genresResponse = await axios.get(`${TMDB_BASE_URL}/genre/movie/list`, {
+      params: { api_key: TMDB_API_KEY }
+    });
+
+    const genreMap = genresResponse.data.genres.reduce((map, genre) => {
+      map[genre.name.toLowerCase()] = genre.id;
+      return map;
+    }, {});
+
+    return genreNames
+      .map(name => genreMap[name.toLowerCase()])
+      .filter(id => id !== undefined);
+  } catch (error) {
+    console.error('Error getting genre IDs:', error);
+    throw error;
   }
 }
 
-// Routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-// Get movie recommendations
-app.get('/api/movies/recommendations', async (req, res) => {
+// Helper function to get movies by genre IDs with sorting
+async function getMoviesByGenres(genreIds, page = 1, sort = 'popularity.desc') {
   try {
-    const { mood, genres = [], page = 1 } = req.query;
-    
-    // Convert genres string to array if needed
-    const genresList = typeof genres === 'string' ? genres.split(',').filter(Boolean) : genres;
-    
-    // Get mood-based genres and combine with selected genres
-    const moodGenres = mood ? MOOD_TO_GENRES[mood.toLowerCase()] || [] : [];
-    const allGenres = [...new Set([...moodGenres, ...genresList])];
-
-    const params = {
-      with_genres: allGenres.join(','),
-      sort_by: 'popularity.desc',
-      include_adult: false,
-      page: parseInt(page),
-      per_page: 20 // Set fixed number of results per page
-    };
-
-    const response = await tmdbApi.get('/discover/movie', { params });
-    
-    // Get external IDs for each movie
-    const moviesWithIds = await Promise.all(
-      response.data.results.map(movie => getMovieWithExternalIds(movie.id))
-    );
-
-    // Filter out any null results from failed requests
-    const validMovies = moviesWithIds.filter(movie => movie !== null);
-    
-    res.json({
-      results: validMovies,
-      currentPage: response.data.page,
-      totalPages: response.data.total_pages,
-      totalResults: response.data.total_results
-    });
-  } catch (error) {
-    console.error('Error fetching movie recommendations:', error);
-    res.status(error.response?.status || 500).json({
-      error: error.response?.data?.status_message || 'Failed to fetch movie recommendations'
-    });
-  }
-});
-
-// Search movies (must come before the :id route to avoid conflicts)
-app.get('/api/movies/search', async (req, res) => {
-  try {
-    const { query, page = 1 } = req.query;
-    const response = await tmdbApi.get('/search/movie', {
+    const response = await axios.get(`${TMDB_BASE_URL}/discover/movie`, {
       params: {
-        query,
-        page: parseInt(page),
-        include_adult: false
+        api_key: TMDB_API_KEY,
+        with_genres: genreIds.join(','),
+        page,
+        sort_by: sort,
+        include_adult: false,
+        vote_count: sort.startsWith('vote_average') ? 100 : 0 // Minimum vote count for rating-based sorting
       }
     });
-
-    // Get external IDs for search results
-    const moviesWithIds = await Promise.all(
-      response.data.results.map(movie => getMovieWithExternalIds(movie.id))
-    );
-
-    // Filter out any null results from failed requests
-    const validMovies = moviesWithIds.filter(movie => movie !== null);
-
-    res.json({
-      results: validMovies,
-      currentPage: response.data.page,
-      totalPages: response.data.total_pages,
-      totalResults: response.data.total_results
-    });
+    return response.data;
   } catch (error) {
-    console.error('Error searching movies:', error);
-    res.status(error.response?.status || 500).json({
-      error: error.response?.data?.status_message || 'Failed to search movies'
-    });
+    console.error('Error getting movies by genres:', error);
+    throw error;
   }
-});
+}
 
-// Get movie details (must come after search to avoid conflicts)
-app.get('/api/movies/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const response = await tmdbApi.get(`/movie/${id}`, {
-      params: {
-        append_to_response: 'videos,credits,external_ids'
-      }
-    });
+// Helper function to format movie data
+function formatMovieData(movie) {
+  return {
+    id: movie.id,
+    title: movie.title,
+    overview: movie.overview,
+    posterPath: movie.poster_path,
+    backdropPath: movie.backdrop_path,
+    releaseDate: movie.release_date,
+    voteAverage: movie.vote_average,
+    genres: movie.genres?.map(genre => genre.name) || [],
+    runtime: movie.runtime,
+    credits: movie.credits,
+    videos: movie.videos,
+    similar: movie.similar?.results?.map(formatMovieData) || []
+  };
+}
 
-    res.json({
-      ...response.data,
-      imdbId: response.data.external_ids?.imdb_id
-    });
-  } catch (error) {
-    console.error('Error fetching movie details:', error);
-    res.status(error.response?.status || 500).json({
-      error: error.response?.data?.status_message || 'Failed to fetch movie details'
-    });
-  }
-});
+// Helper function to map moods to genres
+function getMoodGenres(mood) {
+  const moodGenreMap = {
+    happy: ['Comedy', 'Adventure', 'Family'],
+    sad: ['Drama', 'Romance'],
+    excited: ['Action', 'Science Fiction', 'Adventure'],
+    relaxed: ['Animation', 'Family', 'Fantasy'],
+    scared: ['Horror', 'Thriller', 'Mystery'],
+    thoughtful: ['Documentary', 'History', 'Drama']
+  };
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  return moodGenreMap[mood.toLowerCase()] || ['Action', 'Adventure', 'Comedy'];
+}
+
+app.use(errorHandler);
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
