@@ -75,7 +75,8 @@ app.get('/api/movies/recommendations', async (req, res) => {
       with_genres: allGenres.join(','),
       sort_by: 'popularity.desc',
       include_adult: false,
-      page: parseInt(page)
+      page: parseInt(page),
+      per_page: 20 // Set fixed number of results per page
     };
 
     const response = await tmdbApi.get('/discover/movie', { params });

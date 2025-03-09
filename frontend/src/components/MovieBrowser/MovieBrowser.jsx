@@ -13,8 +13,8 @@ const MovieBrowser = () => {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page')) || 1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // State from URL parameters
   const [selectedMood, setSelectedMood] = useState(searchParams.get('mood') || '');
@@ -35,32 +35,31 @@ const MovieBrowser = () => {
     if (streamingFilters.services.length) params.set('services', streamingFilters.services.join(','));
     if (streamingFilters.country !== 'US') params.set('country', streamingFilters.country);
     if (streamingFilters.includeRentals) params.set('rentals', 'true');
+    params.set('page', currentPage.toString());
     setSearchParams(params);
-  }, [selectedMood, selectedGenres, streamingFilters, setSearchParams]);
+  }, [selectedMood, selectedGenres, streamingFilters, currentPage, setSearchParams]);
 
   // Reset page when filters change
   useEffect(() => {
-    setPage(1);
+    setCurrentPage(1);
     setMovies([]);
-    setHasMore(true);
   }, [selectedMood, selectedGenres, streamingFilters]);
 
   // Fetch movies based on filters
-  const fetchMovies = async (currentPage = 1) => {
+  const fetchMovies = async (page = 1) => {
     try {
       setLoading(true);
       setError(null);
 
       // Get movie recommendations based on mood and genres
-      const { results, totalPages } = await movieService.getRecommendations({
+      const { results, totalPages: total } = await movieService.getRecommendations({
         mood: selectedMood,
         genres: selectedGenres,
-        page: currentPage
+        page
       });
 
-      // Update movies state based on page
-      setMovies(prev => currentPage === 1 ? results : [...prev, ...results]);
-      setHasMore(currentPage < totalPages);
+      setMovies(results);
+      setTotalPages(total);
     } catch (err) {
       setError('Failed to fetch movie recommendations');
       console.error('Error fetching movies:', err);
@@ -69,18 +68,17 @@ const MovieBrowser = () => {
     }
   };
 
-  // Load more movies when reaching the bottom
-  const handleLoadMore = () => {
-    if (!loading && hasMore) {
-      const nextPage = page + 1;
-      setPage(nextPage);
-      fetchMovies(nextPage);
-    }
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchMovies(newPage);
+    // Scroll to top when changing pages
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Initial fetch
   useEffect(() => {
-    fetchMovies();
+    fetchMovies(currentPage);
   }, [selectedMood, selectedGenres]);
 
   const handleMoodSelect = (mood) => {
@@ -100,7 +98,7 @@ const MovieBrowser = () => {
       <div className="text-red-500 text-center p-4 bg-red-50 dark:bg-red-900 rounded-lg">
         <p className="font-medium">{error}</p>
         <button 
-          onClick={() => fetchMovies(page)}
+          onClick={() => fetchMovies(currentPage)}
           className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
         >
           Try Again
@@ -133,33 +131,16 @@ const MovieBrowser = () => {
 
           {/* Movie List */}
           <div className="lg:col-span-3">
-            {movies.length > 0 ? (
-              <>
-                <MovieList
-                  movies={movies}
-                  selectedCountry={streamingFilters.country}
-                />
-                {hasMore && (
-                  <div className="mt-8 text-center">
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={loading}
-                      className={`
-                        px-6 py-3 rounded-lg text-white font-medium
-                        ${loading
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-blue-600 hover:bg-blue-700'
-                        }
-                        transition-colors duration-200
-                      `}
-                    >
-                      {loading ? 'Loading...' : 'Load More Movies'}
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : loading ? (
+            {loading ? (
               <LoadingSpinner />
+            ) : movies.length > 0 ? (
+              <MovieList
+                movies={movies}
+                selectedCountry={streamingFilters.country}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
             ) : (
               <div className="text-center text-gray-500">
                 <p>No movies found. Try adjusting your filters.</p>
